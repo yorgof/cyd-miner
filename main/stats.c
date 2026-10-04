@@ -1,4 +1,5 @@
 /* Periodically fetches network stats, price and fees from mempool.space. */
+#include <stdbool.h>
 #include <string.h>
 #include "cJSON.h"
 #include "esp_crt_bundle.h"

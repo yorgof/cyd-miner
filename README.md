@@ -7,8 +7,8 @@ Stratum v1 pool.
 Written in C on ESP-IDF v5.5 with no third-party components: the display driver, touch
 driver, text rendering, SHA-256 and Stratum client are all in this repository.
 
-> **This will not find a block.** At about 360 kH/s against a network of roughly
-> 1 ZH/s, the odds are around one in a hundred billion per year. Treat it as a stats
+> **This will not find a block.** At about 1 MH/s against a network of roughly
+> 1 ZH/s, the odds are around one in twenty billion per year. Treat it as a stats
 > display with a lottery ticket attached.
 
 ## What it does
@@ -21,14 +21,24 @@ Tap the screen to switch between two screens.
   difficulty, uptime, WiFi signal and pool status.
 
 Mining runs on both cores. Core 1 drives the ESP32's hardware SHA engine (about
-340 kH/s) and core 0 hashes in software alongside WiFi and the UI (about 20 kH/s).
+1030 kH/s) and core 0 hashes in software alongside WiFi and the UI (about 27 kH/s).
+Once a minute the log shows both rates.
+
+The hardware loop (`main/sha_hw_scan.S`) writes each SHA block into the engine's
+registers while the block before it is still being computed, and waits a counted
+number of CPU cycles instead of polling. It looks at 16 bits of each hash; a hash
+that passes is computed again in software before anything is done with it, so a wrong
+hash from the hardware costs a nonce and never a bad share. At boot the firmware checks
+the loop against the software hash. If it gets hashes wrong, then or later, the miner
+drops to a slower loop with wider margins (about 940 kH/s), then to a polled one (about
+410 kH/s), then to software.
 
 ## Hardware
 
 Built for and tested on the Freenove FNK0103L only. Other ESP32 "CYD" boards with an
 SPI display should work after changing the pins, and possibly the panel init, in
 `main/config.h` and `main/lcd.c`. The hardware SHA path needs an original ESP32 (not
-S2, S3 or C3).
+S2, S3 or C3), and its timing was measured on an ESP32-D0WD-V3, revision 3.1.
 
 ## Setup
 
@@ -67,6 +77,9 @@ esptool.py -p /dev/ttyUSB0 write_flash 0x0 stock-backup.bin
 Keep the backup and any firmware you build to yourself: both contain your WiFi
 password.
 
+`sdkconfig.defaults` only applies when `sdkconfig` is created. After a change to it,
+delete `sdkconfig` and build again.
+
 ## Test without the board
 
 The hashing and Stratum job code builds on a PC:
@@ -76,6 +89,25 @@ gcc -O2 -Imain -o host_test test/host_test.c main/sha256.c main/work.c
 ./host_test                                                    # genesis block self-test
 python3 test/pool_e2e.py <host> <port> <address> ./host_test   # mine and submit one share
 ```
+
+## Tuning the hardware loop
+
+The waits in `main/sha_hw_scan.S` come from a bench that runs on the board in place of
+the miner:
+
+```sh
+idf.py -DSHA_BENCH=1 build && idf.py -p /dev/ttyUSB0 flash monitor
+idf.py -DSHA_BENCH=0 build    # back to the miner
+```
+
+It runs each loop over the same nonces, checks every hash against software and prints
+cycles per nonce and wrong hashes: with core 0 idle, with core 0 loading the buses the
+SHA registers share, and next to the rest of the firmware. Loops to compare go in
+`main/bench_variants.def`.
+
+The SHA engine shares a bus with the ESP32's AES and big-number engines. TLS running on
+those makes the fast loop get hashes wrong during every stats fetch, so
+`sdkconfig.defaults` keeps mbedTLS in software.
 
 ## Limitations
 

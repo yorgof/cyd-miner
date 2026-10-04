@@ -50,3 +50,6 @@ void stratum_submit(const work_t *work, uint32_t nonce);
 void miner_start(void);
 void stats_start(void);
 void ui_start(void);
+
+/* bench.c, only built with -DSHA_BENCH=1 */
+void bench_run(void);

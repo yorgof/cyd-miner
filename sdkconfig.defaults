@@ -4,3 +4,9 @@ CONFIG_COMPILER_OPTIMIZATION_PERF=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 # the miner owns the hardware SHA engine
 CONFIG_MBEDTLS_HARDWARE_SHA=n
+# ... and the AES and big-number engines share its bus: TLS on them makes the
+# mining loop drop hashes
+CONFIG_MBEDTLS_HARDWARE_AES=n
+CONFIG_MBEDTLS_HARDWARE_MPI=n
+# core 1 is the hardware miner's alone
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y

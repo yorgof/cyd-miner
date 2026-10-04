@@ -18,10 +18,15 @@ void state_unlock(void)
 void app_main(void)
 {
     state_mutex = xSemaphoreCreateMutex();
+#ifdef SHA_BENCH
+    bench_run();
+#endif
     lcd_init();
     ui_start();
     net_start();
     stratum_start();
     stats_start();
+#ifndef SHA_BENCH
     miner_start();
+#endif
 }

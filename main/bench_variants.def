@@ -1,0 +1,14 @@
+/*
+ * Extra loops for the bench, next to the ones the firmware ships:
+ *
+ *   V(name, g, p1, d2, p2, pl1, d3, p3, tail)
+ *
+ * with the arguments of SCAN in sha_hw_scan.S. Each takes about half a
+ * kilobyte of IRAM, which has room for some twenty of them.
+ *
+ * Here: the fast loop with one wait at a time a cycle shorter.
+ */
+V(fast_p1, 1, 8, 14, 42, 10, 11, 30, Lnnn0n1nnnn2n3n4s5nSn67)
+V(fast_p2, 1, 9, 14, 41, 10, 11, 30, Lnnn0n1nnnn2n3n4s5nSn67)
+V(fast_pl1, 1, 9, 14, 42, 9, 11, 30, Lnnn0n1nnnn2n3n4s5nSn67)
+V(fast_p3, 1, 9, 14, 42, 10, 11, 29, Lnnn0n1nnnn2n3n4s5nSn67)
