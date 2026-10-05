@@ -1,0 +1,56 @@
+name: release
+
+# Pushing a tag like v0.2.0 builds the firmware, attaches it to a GitHub
+# release and puts it on the browser installer page.
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.5
+          target: esp32
+          # factory.bin is the whole flash from address 0, for a first install over USB
+          command: >-
+            idf.py -DPROJECT_VER="$GITHUB_REF_NAME" build &&
+            cd build &&
+            esptool.py --chip esp32 merge_bin -o factory.bin @flash_args
+      - name: Collect the files
+        run: |
+          mkdir out site
+          cp build/factory.bin "out/cyd-miner-$GITHUB_REF_NAME-factory.bin"
+          cp build/cyd-miner.bin "out/cyd-miner-$GITHUB_REF_NAME-ota.bin"
+          cp flasher/index.html build/factory.bin site/
+          sed "s/VERSION/$GITHUB_REF_NAME/" flasher/manifest.json > site/manifest.json
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" out/* --generate-notes
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  # The installer has to serve the firmware itself: a browser is not allowed
+  # to fetch a release download from another site's page. Needs Pages set to
+  # "GitHub Actions" in the repository settings.
+  installer:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

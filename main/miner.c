@@ -97,13 +97,13 @@ static void miner_task(void *arg)
     TickType_t last_rest = xTaskGetTickCount();
 
     if (id == 1) {
-        hw = sha_hw_select();
+        hw = g_state.hw_loop = sha_hw_select();
         if (hw) ESP_LOGI(TAG, "hardware SHA on core 1, %s loop", hw);
         else ESP_LOGW(TAG, "hardware SHA self-test failed, using software");
     }
 
     for (;;) {
-        if (!stratum_get_work(&gen, &work, &difficulty)) {
+        if (g_state.updating || !stratum_get_work(&gen, &work, &difficulty)) {
             vTaskDelay(pdMS_TO_TICKS(200));
             continue;
         }
@@ -116,7 +116,7 @@ static void miner_task(void *arg)
                 scan.count = 0x1000;
                 while (sha_hw_scan(&scan)) {
                     if (confirm(&work, scan.w3 - 1, difficulty)) continue;
-                    hw = sha_hw_step_down();
+                    hw = g_state.hw_loop = sha_hw_step_down();
                     ESP_LOGW(TAG, "switching to %s%s", hw ? "the hardware loop: " : "software", hw ? hw : "");
                     if (!hw) break;
                 }
@@ -128,7 +128,7 @@ static void miner_task(void *arg)
                 } while (++scan.w3 & 0xFFF);
             }
             if ((scan.w3 & 0xFFF) == 0) g_state.hashes[id] += 0x1000;
-            if (stratum_generation() != gen) break;
+            if (stratum_generation() != gen || g_state.updating) break;
             /* let the idle task run every few seconds so the watchdog stays fed */
             if (xTaskGetTickCount() - last_rest >= pdMS_TO_TICKS(rest_seconds[id] * 1000)) {
                 if (id == 1) report();

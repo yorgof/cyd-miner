@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install cyd-miner</title>
+<style>
+body { margin: 0; background: #111; color: #eee; font: 17px/1.5 system-ui, sans-serif; }
+header { background: #f7931a; color: #000; padding: 12px 20px; }
+h1 { margin: 0; font-size: 20px; }
+main { max-width: 640px; margin: 0 auto; padding: 20px; }
+a { color: #f7931a; }
+li { margin-bottom: 8px; }
+button { font: inherit; font-weight: 600; background: #f7931a; color: #000; border: 0; border-radius: 6px; padding: 12px 28px; }
+.note { color: #999; font-size: 15px; }
+code { background: #222; padding: 2px 5px; border-radius: 4px; font-size: 14px; }
+</style>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+</head>
+<body>
+<header><h1>Install cyd-miner</h1></header>
+<main>
+<p>Firmware for the Freenove FNK0103L "Cheap Yellow Display": live Bitcoin stats and a solo miner.
+See the <a href="https://github.com/yorgof/cyd-miner">project page</a> for what it does.</p>
+<ol>
+<li>Connect the board to this computer with a USB cable that carries data.</li>
+<li>Click Install and choose the board's serial port, which is usually named after its CH340 chip.</li>
+<li>When it has finished, the board's screen names a WiFi network. Join it with a phone and fill in the
+page that opens: your WiFi, a pool and a Bitcoin address.</li>
+</ol>
+<esp-web-install-button manifest="manifest.json">
+<button slot="activate">Install</button>
+<p slot="unsupported">This browser cannot reach serial ports. Use Chrome or Edge on a computer, or download
+<code>cyd-miner-…-factory.bin</code> from the <a href="https://github.com/yorgof/cyd-miner/releases">releases page</a>
+and write it with <code>esptool.py write_flash 0x0 cyd-miner-…-factory.bin</code>.</p>
+<p slot="not-allowed">Installing needs this page to be opened over HTTPS.</p>
+</esp-web-install-button>
+<p class="note">Installing replaces the firmware that is on the board and any cyd-miner settings saved on it.
+To update a board that already runs cyd-miner and keep its settings, upload the <code>-ota.bin</code> file on the
+miner's own web page instead.</p>
+</main>
+</body>
+</html>

@@ -67,7 +67,7 @@ void lcd_init(void)
     assert(buf);
 
     /* landscape, BGR panel; the two values are 180 degrees apart */
-    uint8_t madctl = LCD_FLIP ? 0xA8 : 0x68, colmod = 0x55;
+    uint8_t madctl = g_settings.lcd_flip ? 0xA8 : 0x68, colmod = 0x55;
     lcd_cmd(0x01, NULL, 0); /* software reset */
     vTaskDelay(pdMS_TO_TICKS(150));
     lcd_cmd(0x11, NULL, 0); /* sleep out */

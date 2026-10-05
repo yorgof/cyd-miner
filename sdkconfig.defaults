@@ -1,5 +1,9 @@
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
-CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+# an uploaded firmware that does not come up on the network is undone at the
+# next reset
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 # the miner owns the hardware SHA engine
@@ -10,3 +14,8 @@ CONFIG_MBEDTLS_HARDWARE_AES=n
 CONFIG_MBEDTLS_HARDWARE_MPI=n
 # core 1 is the hardware miner's alone
 CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y
+# room for what a browser sends ahead of a request
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=2048
+# the WiFi event handler also marks an uploaded firmware as good, a flash
+# write that left 816 bytes of the default 2304 unused
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=3072

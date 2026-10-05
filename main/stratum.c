@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "cJSON.h"
+#include "esp_app_desc.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -26,6 +27,8 @@ static uint32_t en2_counter, submit_id;
 static char extranonce1[64];
 static size_t en2_size;
 static char line[LINE_BUF];
+/* The name the pool knows this miner by: the payout address, then the worker name if there is one. */
+static char user[sizeof(g_settings.btc_address) + sizeof(g_settings.worker)];
 
 static bool send_line(const char *msg)
 {
@@ -61,13 +64,13 @@ bool stratum_get_work(uint32_t *gen, work_t *work, double *difficulty)
 
 void stratum_submit(const work_t *work, uint32_t nonce)
 {
-    char msg[256];
+    char msg[384];
     xSemaphoreTake(job_lock, portMAX_DELAY);
     uint32_t id = SUBMIT_ID_BASE + submit_id++;
     xSemaphoreGive(job_lock);
     snprintf(msg, sizeof(msg),
-             "{\"id\":%u,\"method\":\"mining.submit\",\"params\":[\"%s.%s\",\"%s\",\"%s\",\"%s\",\"%08x\"]}\n",
-             (unsigned)id, BTC_ADDRESS, WORKER_NAME, work->job_id, work->en2_hex, work->ntime_hex, (unsigned)nonce);
+             "{\"id\":%u,\"method\":\"mining.submit\",\"params\":[\"%s\",\"%s\",\"%s\",\"%s\",\"%08x\"]}\n",
+             (unsigned)id, user, work->job_id, work->en2_hex, work->ntime_hex, (unsigned)nonce);
     if (!send_line(msg)) ESP_LOGW(TAG, "share not sent, pool offline");
 }
 
@@ -154,8 +157,8 @@ static int pool_connect(void)
 {
     struct addrinfo hints = {.ai_family = AF_INET, .ai_socktype = SOCK_STREAM}, *res;
     char port[8];
-    snprintf(port, sizeof(port), "%d", POOL_PORT);
-    if (getaddrinfo(POOL_HOST, port, &hints, &res) != 0 || !res) return -1;
+    snprintf(port, sizeof(port), "%u", g_settings.pool_port);
+    if (getaddrinfo(g_settings.pool_host, port, &hints, &res) != 0 || !res) return -1;
 
     int s = socket(res->ai_family, res->ai_socktype, 0);
     if (s >= 0 && connect(s, res->ai_addr, res->ai_addrlen) != 0) {
@@ -180,18 +183,18 @@ static void set_connected(bool up)
 /* Runs one pool session; returns when the connection is lost. */
 static void session(void)
 {
-    char hello[400];
+    char hello[512];
     size_t used = 0;
 
     extranonce1[0] = 0;
     snprintf(hello, sizeof(hello),
-             "{\"id\":1,\"method\":\"mining.subscribe\",\"params\":[\"cyd-miner/0.1\"]}\n"
+             "{\"id\":1,\"method\":\"mining.subscribe\",\"params\":[\"cyd-miner/%s\"]}\n"
              "{\"id\":2,\"method\":\"mining.suggest_difficulty\",\"params\":[%g]}\n"
-             "{\"id\":3,\"method\":\"mining.authorize\",\"params\":[\"%s.%s\",\"x\"]}\n",
-             (double)SUGGEST_DIFFICULTY, BTC_ADDRESS, WORKER_NAME);
+             "{\"id\":3,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"x\"]}\n",
+             esp_app_get_description()->version, (double)SUGGEST_DIFFICULTY, user);
     if (!send_line(hello)) return;
     set_connected(true);
-    ESP_LOGI(TAG, "connected to %s:%d", POOL_HOST, POOL_PORT);
+    ESP_LOGI(TAG, "connected to %s:%u", g_settings.pool_host, g_settings.pool_port);
 
     for (;;) {
         if (used == LINE_BUF - 1) {
@@ -247,6 +250,11 @@ static void stratum_task(void *arg)
 
 void stratum_start(void)
 {
+    strcpy(user, g_settings.btc_address);
+    if (g_settings.worker[0]) {
+        strcat(user, ".");
+        strcat(user, g_settings.worker);
+    }
     tx_lock = xSemaphoreCreateMutex();
     job_lock = xSemaphoreCreateMutex();
     xTaskCreatePinnedToCore(stratum_task, "stratum", 6144, NULL, 5, NULL, 0);

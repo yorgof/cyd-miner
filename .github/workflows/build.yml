@@ -19,8 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Use the example settings
-        run: cp main/settings.example.h main/settings.h
       - name: Build
         uses: espressif/esp-idf-ci-action@v1
         with:

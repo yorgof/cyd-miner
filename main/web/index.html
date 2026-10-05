@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cyd-miner</title>
+<style>
+:root { --bg: #111; --panel: #1c1c1c; --line: #383838; --text: #eee; --dim: #999; --accent: #f7931a; --bad: #f66; --good: #5c7; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 system-ui, sans-serif; }
+header { background: var(--accent); color: #000; padding: 10px 16px; display: flex; justify-content: space-between; align-items: baseline; }
+h1 { margin: 0; font-size: 18px; }
+main { max-width: 640px; margin: 0 auto; padding: 16px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+h2 { margin: 0 0 12px; font-size: 14px; color: var(--accent); text-transform: uppercase; letter-spacing: .05em; }
+p { margin: 0 0 12px; color: var(--dim); font-size: 14px; }
+a { color: var(--accent); }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.tiles span { display: block; color: var(--dim); font-size: 12px; }
+.tiles b { font-size: 18px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+label { display: block; margin: 12px 0 4px; color: var(--dim); font-size: 13px; }
+input, select, button { font: inherit; }
+input[type=text], input[type=password], input[type=number], select { width: 100%; padding: 9px; background: #000; color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
+button { background: var(--accent); color: #000; border: 0; border-radius: 6px; padding: 10px 18px; font-weight: 600; margin-top: 16px; }
+button.plain, .nets button { background: none; color: var(--accent); border: 1px solid var(--line); font-weight: 400; }
+button:disabled { opacity: .5; }
+.row { display: flex; gap: 12px; }
+.row div { flex: 1; }
+.row .port { flex: 0 0 110px; }
+.check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 15px; }
+.nets button { display: flex; justify-content: space-between; gap: 12px; width: 100%; margin-top: 6px; color: var(--text); text-align: left; }
+.nets span + span { color: var(--dim); white-space: nowrap; }
+.msg { margin-top: 12px; }
+.bad { color: var(--bad); }
+.good { color: var(--good); }
+progress { width: 100%; margin-top: 12px; }
+.hide { display: none; }
+</style>
+</head>
+<body>
+<header><h1>cyd-miner</h1><span id="version"></span></header>
+<main>
+
+<section id="intro" class="hide">
+<h2>Setup</h2>
+<p>Choose your WiFi network, enter a pool and the Bitcoin address that a block reward should go to, then save. The miner restarts and joins your network.</p>
+</section>
+
+<section id="status" class="hide">
+<h2>Status</h2>
+<div class="tiles" id="tiles"></div>
+</section>
+
+<section>
+<h2>Settings</h2>
+<form id="form">
+<label for="ssid">WiFi network (2.4 GHz)</label>
+<input type="text" id="ssid" maxlength="32" required autocapitalize="none" autocorrect="off" spellcheck="false">
+<div class="nets" id="nets"></div>
+<button type="button" class="plain" id="scan">Look for networks</button>
+<label for="wifi_pass">WiFi password</label>
+<input type="password" id="wifi_pass" maxlength="64" autocomplete="off">
+<div class="row">
+<div><label for="pool_host">Pool</label>
+<input type="text" id="pool_host" maxlength="63" required autocapitalize="none" autocorrect="off" spellcheck="false"></div>
+<div class="port"><label for="pool_port">Port</label>
+<input type="number" id="pool_port" min="1" max="65535" required></div>
+</div>
+<label for="address">Bitcoin address for the reward</label>
+<input type="text" id="address" maxlength="95" required autocapitalize="none" autocorrect="off" spellcheck="false">
+<label for="worker">Worker name</label>
+<input type="text" id="worker" maxlength="31" autocapitalize="none" autocorrect="off" spellcheck="false">
+<label for="currency">Currency</label>
+<select id="currency">
+<option>USD</option><option>EUR</option><option>GBP</option><option>CAD</option><option>CHF</option><option>AUD</option><option>JPY</option>
+</select>
+<label class="check"><input type="checkbox" id="flip"> Turn the picture upside down</label>
+<label for="admin_pass">Password for this page</label>
+<input type="password" id="admin_pass" maxlength="32" autocomplete="new-password">
+<label class="check hide" id="drop_row"><input type="checkbox" id="drop"> Remove the password</label>
+<button type="submit">Save and restart</button>
+<div class="msg" id="form_msg"></div>
+</form>
+</section>
+
+<section>
+<h2>Firmware</h2>
+<p>Installed: <span id="installed"></span>. A newer one is a file ending in <b>-ota.bin</b> from the
+<a href="https://github.com/yorgof/cyd-miner/releases" target="_blank" rel="noopener">releases page</a>.</p>
+<input type="file" id="file" accept=".bin">
+<div><button type="button" id="upload" disabled>Upload and install</button></div>
+<progress id="progress" class="hide" max="1" value="0"></progress>
+<div class="msg" id="fw_msg"></div>
+</section>
+
+<section>
+<h2>Device</h2>
+<button type="button" class="plain" id="restart" style="margin-top:0">Restart</button>
+<div class="msg" id="dev_msg"></div>
+</section>
+
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let saved = null;   // the settings the device has, once known
+let away = false;   // the device is restarting or taking an upload: leave it alone
+let setup = false;
+
+function say(id, text, kind) {
+  $(id).textContent = text;
+  $(id).className = 'msg ' + (kind || '');
+}
+
+function put(parent, tag, text) {
+  const e = document.createElement(tag);
+  e.textContent = text;
+  parent.append(e);
+  return e;
+}
+
+// 1234567 -> "1.23 M"
+function scaled(v, unit) {
+  const prefix = ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z'];
+  let i = 0;
+  while (v >= 1000 && i < 7) { v /= 1000; i++; }
+  return (v >= 100 ? v.toFixed(1) : v.toFixed(2)) + ' ' + prefix[i] + unit;
+}
+
+function money(v, currency, digits) {
+  return v.toLocaleString(undefined, {style: 'currency', currency: currency, maximumFractionDigits: digits});
+}
+
+function uptime(s) {
+  const d = Math.floor(s / 86400), h = Math.floor(s / 3600) % 24, m = Math.floor(s / 60) % 60;
+  return (d ? d + ' d ' : '') + h + ' h ' + m + ' min';
+}
+
+function show(s) {
+  const cur = s.settings.currency, f = s.fees;
+  const rows = [
+    ['Hashrate', scaled(s.hashrate, 'H/s')],
+    ['Shares accepted / rejected', s.shares_ok + ' / ' + s.shares_bad],
+    ['Best share difficulty', s.best_diff >= 1000 ? scaled(s.best_diff, '') : +s.best_diff.toPrecision(4)],
+    ['Pool difficulty', +s.pool_diff.toPrecision(4)],
+    ['Pool', s.pool_connected ? 'online' : 'offline'],
+    ['Uptime', uptime(s.uptime)],
+    ['WiFi signal', 'rssi' in s ? s.rssi + ' dBm' : '-'],
+    ['SHA-256', s.sha === 'software' ? 'software' : 'hardware, ' + s.sha + ' loop'],
+    ['Bitcoin price', 'price' in s ? money(s.price, cur, 0) : '-'],
+    ['Block height', 'height' in s ? s.height.toLocaleString() : '-'],
+    ['Network hashrate', 'net_hashrate' in s ? scaled(s.net_hashrate, 'H/s') : '-'],
+    ['Network difficulty', 'net_difficulty' in s ? scaled(s.net_difficulty, '') : '-'],
+    ['Fee for a typical transaction', f && 'price' in s ? money(s.price * f.fast * 140 / 1e8, cur, 2) : '-'],
+    ['Fee rate: next block / 30 min / 1 hour', f ? [f.fast, f.mid, f.slow].map(v => +v.toFixed(2)).join(' / ') + ' sat/vB' : '-'],
+  ];
+  $('tiles').textContent = '';
+  for (const [name, value] of rows) {
+    const tile = put($('tiles'), 'div', '');
+    put(tile, 'span', name);
+    put(tile, 'b', value);
+  }
+}
+
+function fill(g) {
+  for (const k of ['ssid', 'pool_host', 'pool_port', 'address', 'worker', 'currency']) $(k).value = g[k];
+  $('flip').checked = g.flip;
+  $('wifi_pass').placeholder = g.has_wifi_pass ? 'Unchanged' : '';
+  $('admin_pass').placeholder = g.has_admin_pass ? 'Unchanged' : 'None';
+  $('drop_row').classList.toggle('hide', !g.has_admin_pass);
+}
+
+async function poll() {
+  if (away) return;
+  try {
+    const r = await fetch('/api/status');
+    if (!r.ok) return;
+    const s = await r.json();
+    setup = s.setup;
+    $('version').textContent = $('installed').textContent = s.version;
+    $('intro').classList.toggle('hide', !setup);
+    $('status').classList.toggle('hide', setup);
+    if (!setup) show(s);
+    if (!saved) {
+      saved = s.settings;
+      fill(saved);
+      if (setup) scan();
+    }
+  } catch (e) {}
+}
+
+// Waits for the device to be back, then starts over with what it now has.
+function comeBack() {
+  away = true;
+  setTimeout(() => setInterval(async () => {
+    try {
+      if ((await fetch('/api/status')).status !== 0) location.reload();
+    } catch (e) {}
+  }, 2000), 4000);
+}
+
+async function scan() {
+  const button = $('scan');
+  button.disabled = true;
+  button.textContent = 'Looking...';
+  try {
+    const found = await (await fetch('/api/scan')).json();
+    $('nets').textContent = found.length ? '' : 'No networks found.';
+    for (const n of found) {
+      const b = put($('nets'), 'button', '');
+      b.type = 'button';
+      put(b, 'span', n.ssid);
+      put(b, 'span', (n.open ? 'open, ' : '') + (n.rssi > -60 ? 'strong' : n.rssi > -75 ? 'fair' : 'weak'));
+      b.onclick = () => {
+        $('ssid').value = n.ssid;
+        $('nets').textContent = '';
+        $('wifi_pass').focus();
+      };
+    }
+  } catch (e) {}
+  button.disabled = false;
+  button.textContent = 'Look for networks';
+}
+
+$('scan').onclick = scan;
+
+$('form').onsubmit = async ev => {
+  ev.preventDefault();
+  const body = {
+    ssid: $('ssid').value,
+    pool_host: $('pool_host').value.trim(),
+    pool_port: +$('pool_port').value,
+    address: $('address').value.trim(),
+    worker: $('worker').value.trim(),
+    currency: $('currency').value,
+    flip: $('flip').checked,
+  };
+  // Left empty, the WiFi password stays as it is. For another network, empty means it has none.
+  const moved = !saved || body.ssid !== saved.ssid;
+  if ($('wifi_pass').value || moved) body.wifi_pass = $('wifi_pass').value;
+  if ($('drop').checked) body.admin_pass = '';
+  else if ($('admin_pass').value) body.admin_pass = $('admin_pass').value;
+
+  say('form_msg', 'Saving...');
+  try {
+    const r = await fetch('/api/settings', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    const answer = await r.json();
+    if (!r.ok) return say('form_msg', answer.error, 'bad');
+    if (setup || moved) {
+      away = true;
+      say('form_msg', 'Saved. The miner is restarting and will join "' + body.ssid + '". Its screen then shows the address of this page on that network.', 'good');
+    } else {
+      say('form_msg', 'Saved. Restarting...', 'good');
+      comeBack();
+    }
+  } catch (e) {
+    say('form_msg', 'The miner did not answer.', 'bad');
+  }
+};
+
+$('file').onchange = () => { $('upload').disabled = !$('file').files.length; };
+
+$('upload').onclick = () => {
+  const file = $('file').files[0];
+  const x = new XMLHttpRequest();
+  const failed = text => {
+    away = false;
+    $('upload').disabled = false;
+    $('progress').classList.add('hide');
+    say('fw_msg', text, 'bad');
+  };
+  away = true;
+  $('upload').disabled = true;
+  $('progress').value = 0;
+  $('progress').classList.remove('hide');
+  say('fw_msg', 'Uploading. Mining is paused meanwhile.');
+  x.upload.onprogress = ev => { if (ev.lengthComputable) $('progress').value = ev.loaded / ev.total; };
+  x.onload = () => {
+    let answer = {};
+    try { answer = JSON.parse(x.responseText); } catch (e) {}
+    if (x.status !== 200) return failed(answer.error || 'The upload failed.');
+    say('fw_msg', 'Installed. Restarting...', 'good');
+    comeBack();
+  };
+  x.onerror = () => failed('The upload broke off. The firmware that was running still is.');
+  x.open('POST', '/api/update');
+  x.setRequestHeader('Content-Type', 'application/octet-stream');
+  x.send(file);
+};
+
+$('restart').onclick = async () => {
+  try {
+    if (!(await fetch('/api/restart', {method: 'POST'})).ok) throw 0;
+    say('dev_msg', 'Restarting...', 'good');
+    comeBack();
+  } catch (e) {
+    say('dev_msg', 'The miner did not answer.', 'bad');
+  }
+};
+
+poll();
+setInterval(poll, 3000);
+</script>
+</body>
+</html>

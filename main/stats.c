@@ -81,16 +81,21 @@ static void refresh(void)
     }
     if ((j = get_json(MEMPOOL_API_URL "/v1/prices"))) {
         state_lock();
-        g_state.price = num(j, CURRENCY);
+        g_state.price = num(j, g_settings.currency);
         g_state.have_price = g_state.price > 0;
         state_unlock();
         cJSON_Delete(j);
     }
-    if ((j = get_json(MEMPOOL_API_URL "/v1/fees/recommended"))) {
+    /*
+     * "recommended" rounds up to whole sat/vB, which is 1 across the board
+     * whenever blocks are not full. "precise" has the fractions; an older
+     * mempool server only has the former.
+     */
+    if ((j = get_json(MEMPOOL_API_URL "/v1/fees/precise")) || (j = get_json(MEMPOOL_API_URL "/v1/fees/recommended"))) {
         state_lock();
-        g_state.fee_fast = (int)num(j, "fastestFee");
-        g_state.fee_mid = (int)num(j, "halfHourFee");
-        g_state.fee_slow = (int)num(j, "hourFee");
+        g_state.fee_fast = num(j, "fastestFee");
+        g_state.fee_mid = num(j, "halfHourFee");
+        g_state.fee_slow = num(j, "hourFee");
         g_state.have_fees = g_state.fee_fast > 0;
         state_unlock();
         cJSON_Delete(j);
