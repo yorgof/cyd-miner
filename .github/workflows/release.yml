@@ -19,9 +19,10 @@ jobs:
         with:
           esp_idf_version: v5.5.5
           target: esp32
-          # factory.bin is the whole flash from address 0, for a first install over USB
+          # factory.bin is the whole flash from address 0, for a first install over USB.
+          # The command runs in a container that has none of the runner's variables.
           command: >-
-            idf.py -DPROJECT_VER="$GITHUB_REF_NAME" build &&
+            idf.py -DPROJECT_VER=${{ github.ref_name }} build &&
             cd build &&
             esptool.py --chip esp32 merge_bin -o factory.bin @flash_args
       - name: Collect the files
